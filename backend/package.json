@@ -1,0 +1,45 @@
+{
+  "name": "chainpulse-backend",
+  "version": "1.0.0",
+  "description": "ChainPulse Backend - Chainhook-powered activity tracking for Stacks",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "chainhook:register": "tsx src/scripts/register-chainhooks.ts",
+    "chainhook:status": "tsx src/scripts/check-status.ts",
+    "chainhook:list": "tsx src/scripts/list-chainhooks.ts",
+    "test": "vitest"
+  },
+  "keywords": [
+    "stacks",
+    "chainhook",
+    "hiro",
+    "blockchain",
+    "activity-tracker"
+  ],
+  "author": "Bamzz",
+  "license": "MIT",
+  "dependencies": {
+    "@hirosystems/chainhooks-client": "^1.0.0",
+    "@stacks/blockchain-api-client": "^8.0.0",
+    "@stacks/transactions": "^6.17.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "hono": "^4.6.0",
+    "undici": "^6.21.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}

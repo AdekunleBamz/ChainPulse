@@ -1,0 +1,25 @@
+[project]
+name = "chainpulse"
+description = "A Chainhook-powered activity tracker for Stacks"
+authors = ["Bamzz <bamzzz@farcaster>"]
+telemetry = false
+cache_dir = "./.cache"
+
+[contracts.pulse-core]
+path = "contracts/pulse-core.clar"
+clarity_version = 3
+epoch = 3.0
+
+[contracts.pulse-rewards]
+path = "contracts/pulse-rewards.clar"
+clarity_version = 3
+epoch = 3.0
+
+[contracts.pulse-badge-nft]
+path = "contracts/pulse-badge-nft.clar"
+clarity_version = 3
+epoch = 3.0
+
+[repl.analysis]
+passes = ["check_checker"]
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }

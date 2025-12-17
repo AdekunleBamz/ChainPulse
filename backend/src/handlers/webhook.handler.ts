@@ -1,0 +1,660 @@
+/**
+ * ChainPulse - Webhook Handler
+ * 
+ * Processes incoming chainhook events and updates application state
+ * Real-time activity tracking powered by Hiro Chainhooks
+ */
+
+import { EventEmitter } from 'events';
+
+// Event types from our contracts
+export interface PulseEvent {
+  event: 'pulse-sent';
+  user: string;
+  points: number;
+  streak: number;
+  fee: number;
+  total_pulses: number;
+}
+
+export interface BoostEvent {
+  event: 'boost-activated';
+  user: string;
+  points: number;
+  fee: number;
+  total_boosts: number;
+}
+
+export interface CheckinEvent {
+  event: 'daily-checkin';
+  user: string;
+  day: number;
+  points: number;
+}
+
+export interface MegaPulseEvent {
+  event: 'mega-pulse';
+  user: string;
+  multiplier: number;
+  points: number;
+  fee: number;
+}
+
+export interface ChallengeEvent {
+  event: 'challenge-completed';
+  user: string;
+  challenge_id: number;
+  points: number;
+  fee: number;
+}
+
+export interface RewardEvent {
+  event: 'reward-claimed';
+  user: string;
+  reward_id: number;
+  points_spent: number;
+  stx_value: number;
+  new_tier: string;
+}
+
+export interface TierEvent {
+  event: 'tier-achieved';
+  user: string;
+  tier: string;
+  total_points: number;
+  previous_tier: string;
+}
+
+export interface BadgeEvent {
+  event: 'badge-minted';
+  token_id: number;
+  badge_type: number;
+  recipient: string;
+  milestone: number;
+}
+
+export interface STXTransferEvent {
+  sender: string;
+  recipient: string;
+  amount: number;
+  block_height: number;
+}
+
+// Chainhook payload structure
+export interface ChainhookPayload {
+  apply: Array<{
+    block_identifier: {
+      index: number;
+      hash: string;
+    };
+    timestamp: number;
+    transactions: Array<{
+      transaction_identifier: {
+        hash: string;
+      };
+      metadata: {
+        receipt: {
+          events: Array<{
+            type: string;
+            data: any;
+          }>;
+        };
+      };
+    }>;
+  }>;
+  rollback?: Array<{
+    block_identifier: {
+      index: number;
+      hash: string;
+    };
+  }>;
+  chainhook: {
+    uuid: string;
+    predicate: any;
+    is_streaming_blocks: boolean;
+  };
+}
+
+// Activity record for database storage
+export interface ActivityRecord {
+  id: string;
+  user: string;
+  eventType: string;
+  points: number;
+  fee: number;
+  blockHeight: number;
+  txHash: string;
+  timestamp: Date;
+  metadata: Record<string, any>;
+}
+
+// Leaderboard entry
+export interface LeaderboardEntry {
+  user: string;
+  totalPoints: number;
+  totalPulses: number;
+  currentStreak: number;
+  longestStreak: number;
+  tier: string;
+  lastActive: Date;
+}
+
+class WebhookHandler extends EventEmitter {
+  private activities: ActivityRecord[] = [];
+  private leaderboard: Map<string, LeaderboardEntry> = new Map();
+  private totalFees: number = 0;
+  private totalTransactions: number = 0;
+
+  constructor() {
+    super();
+    console.log('[WebhookHandler] Initialized');
+  }
+
+  /**
+   * Process incoming chainhook payload
+   */
+  async processPayload(payload: ChainhookPayload): Promise<void> {
+    console.log('[WebhookHandler] Processing chainhook payload...');
+    console.log(`[WebhookHandler] Hook UUID: ${payload.chainhook.uuid}`);
+    console.log(`[WebhookHandler] Streaming: ${payload.chainhook.is_streaming_blocks}`);
+
+    // Handle rollbacks first
+    if (payload.rollback && payload.rollback.length > 0) {
+      await this.handleRollback(payload.rollback);
+    }
+
+    // Process new blocks
+    for (const block of payload.apply) {
+      console.log(`[WebhookHandler] Processing block ${block.block_identifier.index}`);
+      
+      for (const tx of block.transactions) {
+        await this.processTransaction(tx, block.block_identifier.index, block.timestamp);
+      }
+    }
+
+    this.totalTransactions += payload.apply.reduce(
+      (sum, block) => sum + block.transactions.length, 
+      0
+    );
+
+    console.log(`[WebhookHandler] Total transactions processed: ${this.totalTransactions}`);
+  }
+
+  /**
+   * Handle blockchain rollback (reorg)
+   */
+  private async handleRollback(rollback: ChainhookPayload['rollback']): Promise<void> {
+    if (!rollback) return;
+
+    for (const block of rollback) {
+      console.log(`[WebhookHandler] Rolling back block ${block.block_identifier.index}`);
+      
+      // Remove activities from rolled back blocks
+      this.activities = this.activities.filter(
+        activity => activity.blockHeight !== block.block_identifier.index
+      );
+    }
+
+    this.emit('rollback', rollback);
+  }
+
+  /**
+   * Process individual transaction
+   */
+  private async processTransaction(
+    tx: ChainhookPayload['apply'][0]['transactions'][0],
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    const txHash = tx.transaction_identifier.hash;
+    const events = tx.metadata?.receipt?.events || [];
+
+    for (const event of events) {
+      if (event.type === 'print_event' || event.type === 'SmartContractEvent') {
+        await this.processPrintEvent(event.data, txHash, blockHeight, timestamp);
+      } else if (event.type === 'nft_mint_event' || event.type === 'NFTMintEvent') {
+        await this.processNFTEvent(event.data, txHash, blockHeight, timestamp);
+      } else if (event.type === 'stx_transfer_event' || event.type === 'STXTransferEvent') {
+        await this.processSTXTransfer(event.data, txHash, blockHeight, timestamp);
+      }
+    }
+  }
+
+  /**
+   * Process print events from smart contracts
+   */
+  private async processPrintEvent(
+    data: any,
+    txHash: string,
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    try {
+      // Parse the print event data
+      const eventData = typeof data === 'string' ? JSON.parse(data) : data;
+      const eventType = eventData.event;
+
+      console.log(`[WebhookHandler] Processing ${eventType} event`);
+
+      switch (eventType) {
+        case 'pulse-sent':
+          await this.handlePulseEvent(eventData as PulseEvent, txHash, blockHeight, timestamp);
+          break;
+        case 'boost-activated':
+          await this.handleBoostEvent(eventData as BoostEvent, txHash, blockHeight, timestamp);
+          break;
+        case 'daily-checkin':
+          await this.handleCheckinEvent(eventData as CheckinEvent, txHash, blockHeight, timestamp);
+          break;
+        case 'mega-pulse':
+          await this.handleMegaPulseEvent(eventData as MegaPulseEvent, txHash, blockHeight, timestamp);
+          break;
+        case 'challenge-completed':
+          await this.handleChallengeEvent(eventData as ChallengeEvent, txHash, blockHeight, timestamp);
+          break;
+        case 'reward-claimed':
+          await this.handleRewardEvent(eventData as RewardEvent, txHash, blockHeight, timestamp);
+          break;
+        case 'tier-achieved':
+          await this.handleTierEvent(eventData as TierEvent, txHash, blockHeight, timestamp);
+          break;
+        default:
+          console.log(`[WebhookHandler] Unknown event type: ${eventType}`);
+      }
+    } catch (error) {
+      console.error('[WebhookHandler] Failed to process print event:', error);
+    }
+  }
+
+  /**
+   * Handle pulse-sent event
+   */
+  private async handlePulseEvent(
+    event: PulseEvent,
+    txHash: string,
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    const activity: ActivityRecord = {
+      id: `${txHash}-pulse`,
+      user: event.user,
+      eventType: 'pulse',
+      points: event.points,
+      fee: event.fee,
+      blockHeight,
+      txHash,
+      timestamp: new Date(timestamp * 1000),
+      metadata: {
+        streak: event.streak,
+        totalPulses: event.total_pulses,
+      },
+    };
+
+    this.activities.push(activity);
+    this.totalFees += event.fee;
+    this.updateLeaderboard(event.user, event.points, 1, event.streak);
+    
+    this.emit('pulse', activity);
+    console.log(`[WebhookHandler] Pulse from ${event.user}: +${event.points} points, streak: ${event.streak}`);
+  }
+
+  /**
+   * Handle boost-activated event
+   */
+  private async handleBoostEvent(
+    event: BoostEvent,
+    txHash: string,
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    const activity: ActivityRecord = {
+      id: `${txHash}-boost`,
+      user: event.user,
+      eventType: 'boost',
+      points: event.points,
+      fee: event.fee,
+      blockHeight,
+      txHash,
+      timestamp: new Date(timestamp * 1000),
+      metadata: {
+        totalBoosts: event.total_boosts,
+      },
+    };
+
+    this.activities.push(activity);
+    this.totalFees += event.fee;
+    this.updateLeaderboard(event.user, event.points, 0, 0);
+    
+    this.emit('boost', activity);
+    console.log(`[WebhookHandler] Boost from ${event.user}: +${event.points} points`);
+  }
+
+  /**
+   * Handle daily-checkin event
+   */
+  private async handleCheckinEvent(
+    event: CheckinEvent,
+    txHash: string,
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    const activity: ActivityRecord = {
+      id: `${txHash}-checkin`,
+      user: event.user,
+      eventType: 'checkin',
+      points: event.points,
+      fee: 0,
+      blockHeight,
+      txHash,
+      timestamp: new Date(timestamp * 1000),
+      metadata: {
+        day: event.day,
+      },
+    };
+
+    this.activities.push(activity);
+    this.updateLeaderboard(event.user, event.points, 0, 0);
+    
+    this.emit('checkin', activity);
+    console.log(`[WebhookHandler] Check-in from ${event.user}: day ${event.day}`);
+  }
+
+  /**
+   * Handle mega-pulse event
+   */
+  private async handleMegaPulseEvent(
+    event: MegaPulseEvent,
+    txHash: string,
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    const activity: ActivityRecord = {
+      id: `${txHash}-mega`,
+      user: event.user,
+      eventType: 'mega-pulse',
+      points: event.points,
+      fee: event.fee,
+      blockHeight,
+      txHash,
+      timestamp: new Date(timestamp * 1000),
+      metadata: {
+        multiplier: event.multiplier,
+      },
+    };
+
+    this.activities.push(activity);
+    this.totalFees += event.fee;
+    this.updateLeaderboard(event.user, event.points, event.multiplier, 0);
+    
+    this.emit('mega-pulse', activity);
+    console.log(`[WebhookHandler] Mega pulse from ${event.user}: ${event.multiplier}x = +${event.points} points`);
+  }
+
+  /**
+   * Handle challenge-completed event
+   */
+  private async handleChallengeEvent(
+    event: ChallengeEvent,
+    txHash: string,
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    const activity: ActivityRecord = {
+      id: `${txHash}-challenge`,
+      user: event.user,
+      eventType: 'challenge',
+      points: event.points,
+      fee: event.fee,
+      blockHeight,
+      txHash,
+      timestamp: new Date(timestamp * 1000),
+      metadata: {
+        challengeId: event.challenge_id,
+      },
+    };
+
+    this.activities.push(activity);
+    this.totalFees += event.fee;
+    this.updateLeaderboard(event.user, event.points, 0, 0);
+    
+    this.emit('challenge', activity);
+    console.log(`[WebhookHandler] Challenge ${event.challenge_id} completed by ${event.user}`);
+  }
+
+  /**
+   * Handle reward-claimed event
+   */
+  private async handleRewardEvent(
+    event: RewardEvent,
+    txHash: string,
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    const activity: ActivityRecord = {
+      id: `${txHash}-reward`,
+      user: event.user,
+      eventType: 'reward',
+      points: -event.points_spent, // Negative because points are spent
+      fee: 0,
+      blockHeight,
+      txHash,
+      timestamp: new Date(timestamp * 1000),
+      metadata: {
+        rewardId: event.reward_id,
+        stxValue: event.stx_value,
+        newTier: event.new_tier,
+      },
+    };
+
+    this.activities.push(activity);
+    
+    // Update tier in leaderboard
+    const entry = this.leaderboard.get(event.user);
+    if (entry) {
+      entry.tier = event.new_tier;
+    }
+    
+    this.emit('reward', activity);
+    console.log(`[WebhookHandler] Reward claimed by ${event.user}: ${event.stx_value} STX`);
+  }
+
+  /**
+   * Handle tier-achieved event
+   */
+  private async handleTierEvent(
+    event: TierEvent,
+    txHash: string,
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    const activity: ActivityRecord = {
+      id: `${txHash}-tier`,
+      user: event.user,
+      eventType: 'tier',
+      points: 0,
+      fee: 0,
+      blockHeight,
+      txHash,
+      timestamp: new Date(timestamp * 1000),
+      metadata: {
+        tier: event.tier,
+        previousTier: event.previous_tier,
+        totalPoints: event.total_points,
+      },
+    };
+
+    this.activities.push(activity);
+    
+    // Update tier in leaderboard
+    const entry = this.leaderboard.get(event.user);
+    if (entry) {
+      entry.tier = event.tier;
+    }
+    
+    this.emit('tier', activity);
+    console.log(`[WebhookHandler] ${event.user} achieved ${event.tier} tier!`);
+  }
+
+  /**
+   * Process NFT mint events
+   */
+  private async processNFTEvent(
+    data: any,
+    txHash: string,
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    const activity: ActivityRecord = {
+      id: `${txHash}-nft`,
+      user: data.recipient || 'unknown',
+      eventType: 'badge-minted',
+      points: 0,
+      fee: 0,
+      blockHeight,
+      txHash,
+      timestamp: new Date(timestamp * 1000),
+      metadata: {
+        tokenId: data.asset_identifier,
+        recipient: data.recipient,
+      },
+    };
+
+    this.activities.push(activity);
+    this.emit('badge', activity);
+    console.log(`[WebhookHandler] Badge minted to ${data.recipient}`);
+  }
+
+  /**
+   * Process STX transfer events
+   */
+  private async processSTXTransfer(
+    data: STXTransferEvent,
+    txHash: string,
+    blockHeight: number,
+    timestamp: number
+  ): Promise<void> {
+    const activity: ActivityRecord = {
+      id: `${txHash}-stx`,
+      user: data.sender,
+      eventType: 'stx-transfer',
+      points: 0,
+      fee: data.amount,
+      blockHeight,
+      txHash,
+      timestamp: new Date(timestamp * 1000),
+      metadata: {
+        sender: data.sender,
+        recipient: data.recipient,
+        amount: data.amount,
+      },
+    };
+
+    this.activities.push(activity);
+    this.emit('stx-transfer', activity);
+  }
+
+  /**
+   * Update leaderboard entry for a user
+   */
+  private updateLeaderboard(
+    user: string,
+    points: number,
+    pulses: number,
+    streak: number
+  ): void {
+    let entry = this.leaderboard.get(user);
+
+    if (!entry) {
+      entry = {
+        user,
+        totalPoints: 0,
+        totalPulses: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        tier: 'none',
+        lastActive: new Date(),
+      };
+      this.leaderboard.set(user, entry);
+    }
+
+    entry.totalPoints += points;
+    entry.totalPulses += pulses;
+    entry.lastActive = new Date();
+
+    if (streak > 0) {
+      entry.currentStreak = streak;
+      if (streak > entry.longestStreak) {
+        entry.longestStreak = streak;
+      }
+    }
+
+    // Update tier based on points
+    if (entry.totalPoints >= 5000) entry.tier = 'platinum';
+    else if (entry.totalPoints >= 1000) entry.tier = 'gold';
+    else if (entry.totalPoints >= 500) entry.tier = 'silver';
+    else if (entry.totalPoints >= 100) entry.tier = 'bronze';
+
+    this.emit('leaderboard-update', entry);
+  }
+
+  /**
+   * Get recent activities
+   */
+  getActivities(limit: number = 100): ActivityRecord[] {
+    return this.activities.slice(-limit).reverse();
+  }
+
+  /**
+   * Get user activities
+   */
+  getUserActivities(user: string, limit: number = 50): ActivityRecord[] {
+    return this.activities
+      .filter(a => a.user === user)
+      .slice(-limit)
+      .reverse();
+  }
+
+  /**
+   * Get leaderboard
+   */
+  getLeaderboard(limit: number = 100): LeaderboardEntry[] {
+    return Array.from(this.leaderboard.values())
+      .sort((a, b) => b.totalPoints - a.totalPoints)
+      .slice(0, limit);
+  }
+
+  /**
+   * Get total fees collected
+   */
+  getTotalFees(): number {
+    return this.totalFees;
+  }
+
+  /**
+   * Get total transactions processed
+   */
+  getTotalTransactions(): number {
+    return this.totalTransactions;
+  }
+
+  /**
+   * Get stats summary
+   */
+  getStats(): {
+    totalUsers: number;
+    totalActivities: number;
+    totalFees: number;
+    totalTransactions: number;
+  } {
+    return {
+      totalUsers: this.leaderboard.size,
+      totalActivities: this.activities.length,
+      totalFees: this.totalFees,
+      totalTransactions: this.totalTransactions,
+    };
+  }
+}
+
+// Export singleton instance
+export const webhookHandler = new WebhookHandler();
+export default webhookHandler;

@@ -1,0 +1,223 @@
+[
+  {
+    "chain": "stacks",
+    "uuid": "chainpulse-pulse-events",
+    "name": "ChainPulse - Pulse Sent Events",
+    "version": 1,
+    "networks": {
+      "mainnet": {
+        "if_this": {
+          "scope": "print_event",
+          "contract_identifier": "DEPLOY_ADDRESS.pulse-core",
+          "contains": "pulse-sent"
+        },
+        "then_that": {
+          "http_post": {
+            "url": "YOUR_WEBHOOK_URL/api/chainhook/events/pulse",
+            "authorization_header": "Bearer YOUR_SECRET"
+          }
+        },
+        "start_block": 1,
+        "decode_clarity_values": true
+      },
+      "testnet": {
+        "if_this": {
+          "scope": "print_event",
+          "contract_identifier": "DEPLOY_ADDRESS.pulse-core",
+          "contains": "pulse-sent"
+        },
+        "then_that": {
+          "http_post": {
+            "url": "YOUR_WEBHOOK_URL/api/chainhook/events/pulse",
+            "authorization_header": "Bearer YOUR_SECRET"
+          }
+        },
+        "start_block": 1,
+        "decode_clarity_values": true
+      }
+    }
+  },
+  {
+    "chain": "stacks",
+    "uuid": "chainpulse-boost-events",
+    "name": "ChainPulse - Boost Activated Events",
+    "version": 1,
+    "networks": {
+      "mainnet": {
+        "if_this": {
+          "scope": "print_event",
+          "contract_identifier": "DEPLOY_ADDRESS.pulse-core",
+          "contains": "boost-activated"
+        },
+        "then_that": {
+          "http_post": {
+            "url": "YOUR_WEBHOOK_URL/api/chainhook/events/boost",
+            "authorization_header": "Bearer YOUR_SECRET"
+          }
+        },
+        "start_block": 1,
+        "decode_clarity_values": true
+      }
+    }
+  },
+  {
+    "chain": "stacks",
+    "uuid": "chainpulse-checkin-events",
+    "name": "ChainPulse - Daily Check-in Events",
+    "version": 1,
+    "networks": {
+      "mainnet": {
+        "if_this": {
+          "scope": "print_event",
+          "contract_identifier": "DEPLOY_ADDRESS.pulse-core",
+          "contains": "daily-checkin"
+        },
+        "then_that": {
+          "http_post": {
+            "url": "YOUR_WEBHOOK_URL/api/chainhook/events/checkin",
+            "authorization_header": "Bearer YOUR_SECRET"
+          }
+        },
+        "start_block": 1,
+        "decode_clarity_values": true
+      }
+    }
+  },
+  {
+    "chain": "stacks",
+    "uuid": "chainpulse-mega-pulse-events",
+    "name": "ChainPulse - Mega Pulse Events",
+    "version": 1,
+    "networks": {
+      "mainnet": {
+        "if_this": {
+          "scope": "print_event",
+          "contract_identifier": "DEPLOY_ADDRESS.pulse-core",
+          "contains": "mega-pulse"
+        },
+        "then_that": {
+          "http_post": {
+            "url": "YOUR_WEBHOOK_URL/api/chainhook/events/mega-pulse",
+            "authorization_header": "Bearer YOUR_SECRET"
+          }
+        },
+        "start_block": 1,
+        "decode_clarity_values": true
+      }
+    }
+  },
+  {
+    "chain": "stacks",
+    "uuid": "chainpulse-challenge-events",
+    "name": "ChainPulse - Challenge Completed Events",
+    "version": 1,
+    "networks": {
+      "mainnet": {
+        "if_this": {
+          "scope": "print_event",
+          "contract_identifier": "DEPLOY_ADDRESS.pulse-core",
+          "contains": "challenge-completed"
+        },
+        "then_that": {
+          "http_post": {
+            "url": "YOUR_WEBHOOK_URL/api/chainhook/events/challenge",
+            "authorization_header": "Bearer YOUR_SECRET"
+          }
+        },
+        "start_block": 1,
+        "decode_clarity_values": true
+      }
+    }
+  },
+  {
+    "chain": "stacks",
+    "uuid": "chainpulse-reward-events",
+    "name": "ChainPulse - Reward Claimed Events",
+    "version": 1,
+    "networks": {
+      "mainnet": {
+        "if_this": {
+          "scope": "print_event",
+          "contract_identifier": "DEPLOY_ADDRESS.pulse-rewards",
+          "contains": "reward-claimed"
+        },
+        "then_that": {
+          "http_post": {
+            "url": "YOUR_WEBHOOK_URL/api/chainhook/events/reward",
+            "authorization_header": "Bearer YOUR_SECRET"
+          }
+        },
+        "start_block": 1,
+        "decode_clarity_values": true
+      }
+    }
+  },
+  {
+    "chain": "stacks",
+    "uuid": "chainpulse-tier-events",
+    "name": "ChainPulse - Tier Achieved Events",
+    "version": 1,
+    "networks": {
+      "mainnet": {
+        "if_this": {
+          "scope": "print_event",
+          "contract_identifier": "DEPLOY_ADDRESS.pulse-rewards",
+          "contains": "tier-achieved"
+        },
+        "then_that": {
+          "http_post": {
+            "url": "YOUR_WEBHOOK_URL/api/chainhook/events/tier",
+            "authorization_header": "Bearer YOUR_SECRET"
+          }
+        },
+        "start_block": 1,
+        "decode_clarity_values": true
+      }
+    }
+  },
+  {
+    "chain": "stacks",
+    "uuid": "chainpulse-badge-events",
+    "name": "ChainPulse - Badge Minted Events",
+    "version": 1,
+    "networks": {
+      "mainnet": {
+        "if_this": {
+          "scope": "nft_event",
+          "asset_identifier": "DEPLOY_ADDRESS.pulse-badge-nft::pulse-badge",
+          "actions": ["mint"]
+        },
+        "then_that": {
+          "http_post": {
+            "url": "YOUR_WEBHOOK_URL/api/chainhook/events/badge",
+            "authorization_header": "Bearer YOUR_SECRET"
+          }
+        },
+        "start_block": 1,
+        "decode_clarity_values": true
+      }
+    }
+  },
+  {
+    "chain": "stacks",
+    "uuid": "chainpulse-stx-transfers",
+    "name": "ChainPulse - STX Fee Transfers",
+    "version": 1,
+    "networks": {
+      "mainnet": {
+        "if_this": {
+          "scope": "stx_event",
+          "actions": ["transfer"]
+        },
+        "then_that": {
+          "http_post": {
+            "url": "YOUR_WEBHOOK_URL/api/chainhook/events/stx-transfer",
+            "authorization_header": "Bearer YOUR_SECRET"
+          }
+        },
+        "start_block": 1,
+        "decode_clarity_values": true
+      }
+    }
+  }
+]
