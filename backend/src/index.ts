@@ -37,16 +37,22 @@ let chainhooksService: ChainhooksService | null = null;
 
 // Webhook authentication middleware
 function authenticateWebhook(req: Request, res: Response, next: NextFunction): void {
+  // Check Authorization header
   const authHeader = req.headers.authorization;
-  const expectedAuth = `Bearer ${WEBHOOK_SECRET}`;
-
-  if (!authHeader || authHeader !== expectedAuth) {
-    console.warn('[Server] Unauthorized webhook attempt');
-    res.status(401).json({ error: 'Unauthorized' });
+  if (authHeader === `Bearer ${WEBHOOK_SECRET}`) {
+    next();
     return;
   }
-
-  next();
+  
+  // Check query param token (used by chainhooks)
+  const queryToken = req.query.token as string;
+  if (queryToken === WEBHOOK_SECRET) {
+    next();
+    return;
+  }
+  
+  console.warn('[Server] Unauthorized webhook attempt');
+  res.status(401).json({ error: 'Unauthorized' });
 }
 
 // ===============================
