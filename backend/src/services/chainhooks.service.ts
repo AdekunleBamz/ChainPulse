@@ -6,16 +6,16 @@ import {
 } from '@hirosystems/chainhooks-client';
 
 const PULSE_CORE_CONTRACT = process.env.PULSE_CORE_CONTRACT || 'SP3FKNEZ86RG5RT7SZ5FBRGH85FZNG94ZH1MCGG6N.pulse-core';
+const PULSE_REWARDS_CONTRACT = process.env.PULSE_REWARDS_CONTRACT || 'SP3FKNEZ86RG5RT7SZ5FBRGH85FZNG94ZH1MCGG6N.pulse-rewards';
+const PULSE_BADGE_CONTRACT = process.env.PULSE_BADGE_CONTRACT || 'SP3FKNEZ86RG5RT7SZ5FBRGH85FZNG94ZH1MCGG6N.pulse-badge-nft';
 const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://chainpulse-backend.onrender.com/api/chainhook/events';
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 const NETWORK = process.env.STACKS_NETWORK || 'mainnet';
 
 function webhookUrl(path: string) {
   const base = WEBHOOK_URL.replace(/\/+$/, '');
-  const p = path.startsWith('/') ? path : `/${path}`;
-  // chainhooks-client action schema is only { type: "http_post", url }
-  // so if you want auth, include a token in the URL.
-  return WEBHOOK_SECRET ? `${base}${p}?token=${encodeURIComponent(WEBHOOK_SECRET)}` : `${base}${p}`;
+  const p = path.startsWith('/') ? path : '/' + path;
+  return WEBHOOK_SECRET ? base + p + '?token=' + encodeURIComponent(WEBHOOK_SECRET) : base + p;
 }
 
 export class ChainhooksService {
@@ -37,9 +37,9 @@ export class ChainhooksService {
     return { status: status.status, version: status.server_version };
   }
 
-  async registerPulseSentHook(): Promise<Chainhook> {
+  async registerHook(key: string, displayName: string, contract: string, path: string): Promise<Chainhook> {
     const definition: any = {
-      name: 'ChainPulse-PulseSent',
+      name: displayName,
       version: '1',
       chain: 'stacks',
       network: NETWORK === 'testnet' ? 'testnet' : 'mainnet',
@@ -47,41 +47,65 @@ export class ChainhooksService {
         events: [
           {
             type: 'contract_log',
-            contract_identifier: PULSE_CORE_CONTRACT,
+            contract_identifier: contract,
           }
         ]
       },
       action: {
         type: 'http_post',
-        url: webhookUrl('/pulse'),
+        url: webhookUrl(path),
       }
     };
     const result = await this.client.registerChainhook(definition);
-    console.log('[ChainhooksService] Registered pulse-sent:', result.uuid);
-    this.registeredHooks.set('pulse-sent', result);
+    console.log('[ChainhooksService] Registered ' + key + ':', result.uuid);
+    this.registeredHooks.set(key, result);
     return result;
   }
 
-  async registerBoostHook(): Promise<Chainhook> {
-    throw new Error('Not implemented yet (stage 2)');
-  }
-
-  async registerCheckinHook(): Promise<Chainhook> {
-    throw new Error('Not implemented yet (stage 2)');
-  }
-
-  async registerMegaPulseHook(): Promise<Chainhook> {
-    throw new Error('Not implemented yet (stage 2)');
-  }
-
-  async registerChallengeHook(): Promise<Chainhook> {
-    throw new Error('Not implemented yet (stage 2)');
+  async registerStxTransferHook(): Promise<Chainhook> {
+    const definition: any = {
+      name: 'ChainPulse-STXTransfer',
+      version: '1',
+      chain: 'stacks',
+      network: NETWORK === 'testnet' ? 'testnet' : 'mainnet',
+      filters: {
+        events: [
+          {
+            type: 'stx_transfer',
+          }
+        ]
+      },
+      action: {
+        type: 'http_post',
+        url: webhookUrl('/stx-transfer'),
+      }
+    };
+    const result = await this.client.registerChainhook(definition);
+    console.log('[ChainhooksService] Registered stx-transfer:', result.uuid);
+    this.registeredHooks.set('stx-transfer', result);
+    return result;
   }
 
   async registerAllHooks(): Promise<Map<string, Chainhook>> {
     console.log('[ChainhooksService] Registering all chainhooks...');
-    await this.registerPulseSentHook();
-    // stage 2 will re-enable the remaining hooks once we confirm the schema works end-to-end
+    
+    // pulse-core events (5 hooks)
+    await this.registerHook('pulse-sent', 'ChainPulse-PulseSent', PULSE_CORE_CONTRACT, '/pulse');
+    await this.registerHook('boost', 'ChainPulse-Boost', PULSE_CORE_CONTRACT, '/boost');
+    await this.registerHook('checkin', 'ChainPulse-Checkin', PULSE_CORE_CONTRACT, '/checkin');
+    await this.registerHook('mega-pulse', 'ChainPulse-MegaPulse', PULSE_CORE_CONTRACT, '/mega-pulse');
+    await this.registerHook('challenge', 'ChainPulse-Challenge', PULSE_CORE_CONTRACT, '/challenge');
+    
+    // pulse-rewards events (2 hooks)
+    await this.registerHook('reward', 'ChainPulse-Reward', PULSE_REWARDS_CONTRACT, '/reward');
+    await this.registerHook('tier', 'ChainPulse-Tier', PULSE_REWARDS_CONTRACT, '/tier');
+    
+    // pulse-badge events (1 hook)
+    await this.registerHook('badge', 'ChainPulse-Badge', PULSE_BADGE_CONTRACT, '/badge');
+    
+    // stx transfers (1 hook)
+    await this.registerStxTransferHook();
+    
     console.log('[ChainhooksService] Registered ' + this.registeredHooks.size + ' chainhooks');
     return this.registeredHooks;
   }
@@ -92,9 +116,29 @@ export class ChainhooksService {
     return response;
   }
 
+  async getChainhook(uuid: string): Promise<Chainhook> {
+    const chainhook = await this.client.getChainhook(uuid);
+    console.log('[ChainhooksService] Retrieved chainhook:', uuid);
+    return chainhook;
+  }
+
+  async toggleChainhook(uuid: string, enabled: boolean): Promise<void> {
+    await this.client.enableChainhook(uuid, enabled);
+    console.log('[ChainhooksService] Chainhook ' + uuid + ' ' + (enabled ? 'enabled' : 'disabled'));
+  }
+
   async deleteChainhook(uuid: string): Promise<void> {
     await this.client.deleteChainhook(uuid);
     console.log('[ChainhooksService] Deleted:', uuid);
+  }
+
+  async deleteAllHooks(): Promise<void> {
+    const response = await this.client.getChainhooks({ limit: 200, offset: 0 });
+    for (const hook of response.results) {
+      await this.deleteChainhook(hook.uuid);
+    }
+    this.registeredHooks.clear();
+    console.log('[ChainhooksService] Deleted all chainhooks');
   }
 
   getRegisteredHooks(): Map<string, Chainhook> {
