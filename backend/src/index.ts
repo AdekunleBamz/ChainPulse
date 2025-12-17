@@ -107,27 +107,28 @@ app.post('/api/chainhook/events/:eventType', authenticateWebhook, async (req: Re
     // ignore debug logging failures
   }
 
-  try {
-    await webhookHandler.processPayload(payload);
+  // ACK immediately to avoid Hiro delivery timeouts; process asynchronously.
+  res.status(200).json({ success: true });
+  setImmediate(async () => {
+    try {
+      await webhookHandler.processPayload(payload);
 
-    // Broadcast to WebSocket clients
-    const message = JSON.stringify({
-      type: 'chainhook-event',
-      eventType,
-      timestamp: Date.now(),
-    });
+      // Broadcast to WebSocket clients
+      const message = JSON.stringify({
+        type: 'chainhook-event',
+        eventType,
+        timestamp: Date.now(),
+      });
 
-    wsClients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    });
-
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('[Server] Failed to process webhook:', error);
-    res.status(500).json({ error: 'Failed to process webhook' });
-  }
+      wsClients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(message);
+        }
+      });
+    } catch (error) {
+      console.error('[Server] Failed to process webhook (async):', error);
+    }
+  });
 });
 
 // Individual event type routes (for more specific chainhook configurations)
@@ -147,26 +148,27 @@ eventRoutes.forEach(route => {
       // ignore debug logging failures
     }
 
-    try {
-      await webhookHandler.processPayload(payload);
+    // ACK immediately to avoid Hiro delivery timeouts; process asynchronously.
+    res.status(200).json({ success: true });
+    setImmediate(async () => {
+      try {
+        await webhookHandler.processPayload(payload);
 
-      // Broadcast specific event
-      const message = JSON.stringify({
-        type: route,
-        timestamp: Date.now(),
-      });
+        // Broadcast specific event
+        const message = JSON.stringify({
+          type: route,
+          timestamp: Date.now(),
+        });
 
-      wsClients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(message);
-        }
-      });
-
-      res.status(200).json({ success: true });
-    } catch (error) {
-      console.error(`[Server] Failed to process ${route} webhook:`, error);
-      res.status(500).json({ error: 'Failed to process webhook' });
-    }
+        wsClients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+          }
+        });
+      } catch (error) {
+        console.error(`[Server] Failed to process ${route} webhook (async):`, error);
+      }
+    });
   });
 });
 
