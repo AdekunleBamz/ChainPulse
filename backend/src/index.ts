@@ -97,6 +97,15 @@ app.post('/api/chainhook/events/:eventType', authenticateWebhook, async (req: Re
   const payload = req.body as ChainhookPayload;
 
   console.log(`[Server] Received ${eventType} webhook event`);
+  // Temporary debug (safe): log payload shape without dumping full body
+  try {
+    const bodyAny = req.body as any;
+    console.log('[Server] Webhook payload keys:', Object.keys(bodyAny || {}));
+    console.log('[Server] Webhook has chainhook:', Boolean(bodyAny?.chainhook));
+    console.log('[Server] Webhook apply blocks:', Array.isArray(bodyAny?.apply) ? bodyAny.apply.length : 'n/a');
+  } catch {
+    // ignore debug logging failures
+  }
 
   try {
     await webhookHandler.processPayload(payload);
@@ -128,6 +137,15 @@ eventRoutes.forEach(route => {
   app.post(`/api/chainhook/events/${route}`, authenticateWebhook, async (req: Request, res: Response) => {
     const payload = req.body as ChainhookPayload;
     console.log(`[Server] Received ${route} event`);
+    // Temporary debug (safe): log payload shape without dumping full body
+    try {
+      const bodyAny = req.body as any;
+      console.log('[Server] Webhook payload keys:', Object.keys(bodyAny || {}));
+      console.log('[Server] Webhook has chainhook:', Boolean(bodyAny?.chainhook));
+      console.log('[Server] Webhook apply blocks:', Array.isArray(bodyAny?.apply) ? bodyAny.apply.length : 'n/a');
+    } catch {
+      // ignore debug logging failures
+    }
 
     try {
       await webhookHandler.processPayload(payload);

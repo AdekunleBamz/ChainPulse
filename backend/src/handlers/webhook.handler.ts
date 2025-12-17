@@ -155,16 +155,30 @@ class WebhookHandler extends EventEmitter {
    */
   async processPayload(payload: ChainhookPayload): Promise<void> {
     console.log('[WebhookHandler] Processing chainhook payload...');
-    console.log(`[WebhookHandler] Hook UUID: ${payload.chainhook.uuid}`);
-    console.log(`[WebhookHandler] Streaming: ${payload.chainhook.is_streaming_blocks}`);
+    const p: any = payload as any;
+    const hookUuid =
+      p?.chainhook?.uuid ??
+      p?.chainhook_uuid ??
+      p?.hook_uuid ??
+      p?.uuid ??
+      'unknown';
+    const isStreaming =
+      p?.chainhook?.is_streaming_blocks ??
+      p?.is_streaming_blocks ??
+      p?.chainhook?.status?.is_streaming_blocks ??
+      false;
+
+    console.log(`[WebhookHandler] Hook UUID: ${hookUuid}`);
+    console.log(`[WebhookHandler] Streaming: ${Boolean(isStreaming)}`);
 
     // Handle rollbacks first
-    if (payload.rollback && payload.rollback.length > 0) {
+    if (Array.isArray(p?.rollback) && p.rollback.length > 0) {
       await this.handleRollback(payload.rollback);
     }
 
     // Process new blocks
-    for (const block of payload.apply) {
+    const applyBlocks = Array.isArray(p?.apply) ? p.apply : [];
+    for (const block of applyBlocks) {
       console.log(`[WebhookHandler] Processing block ${block.block_identifier.index}`);
       
       for (const tx of block.transactions) {
@@ -172,10 +186,7 @@ class WebhookHandler extends EventEmitter {
       }
     }
 
-    this.totalTransactions += payload.apply.reduce(
-      (sum, block) => sum + block.transactions.length, 
-      0
-    );
+    this.totalTransactions += applyBlocks.reduce((sum: number, block: any) => sum + block.transactions.length, 0);
 
     console.log(`[WebhookHandler] Total transactions processed: ${this.totalTransactions}`);
   }
