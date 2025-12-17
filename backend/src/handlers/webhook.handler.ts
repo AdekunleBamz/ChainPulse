@@ -196,11 +196,65 @@ class WebhookHandler extends EventEmitter {
     }
 
     // Process new blocks - check multiple possible locations
-    const applyBlocks = 
-      Array.isArray(p?.apply) ? p.apply :
-      Array.isArray(p?.event?.apply) ? p.event.apply :
-      Array.isArray(p?.event?.blocks) ? p.event.blocks :
-      [];
+    // Hiro Chainhooks can send data in different formats:
+    // 1. Standard format: { apply: [...blocks...] }
+    // 2. Event format: { event: { apply: [...blocks...] } }
+    // 3. Contract log format: { event: { ...transaction data... } }
+    let applyBlocks: any[] = [];
+    
+    if (Array.isArray(p?.apply)) {
+      // Standard format with apply blocks at root
+      applyBlocks = p.apply;
+      console.log('[WebhookHandler] Using root-level apply blocks');
+    } else if (Array.isArray(p?.event?.apply)) {
+      // Event format with apply blocks nested
+      applyBlocks = p.event.apply;
+      console.log('[WebhookHandler] Using event.apply blocks');
+    } else if (Array.isArray(p?.event?.blocks)) {
+      // Alternative event format
+      applyBlocks = p.event.blocks;
+      console.log('[WebhookHandler] Using event.blocks');
+    } else if (p?.event && typeof p.event === 'object') {
+      // Handle contract_log event format - event data might be directly in event
+      console.log('[WebhookHandler] Event object found, checking for transaction data...');
+      
+      // Check if event has transaction data directly
+      if (p.event.transaction_identifier || p.event.transaction || p.event.metadata) {
+        // Single transaction in event (contract_log format)
+        const tx = p.event.transaction || p.event;
+        const blockInfo = p.event.block_identifier || p.event.block || { index: 0, hash: '' };
+        const timestamp = p.event.timestamp || p.event.block_timestamp || Date.now() / 1000;
+        
+        applyBlocks = [{
+          block_identifier: typeof blockInfo === 'object' ? blockInfo : { index: blockInfo, hash: '' },
+          timestamp: timestamp,
+          transactions: [tx]
+        }];
+        console.log('[WebhookHandler] Created block from single event transaction');
+      } else if (p.event.contract_log) {
+        // Nested contract_log format
+        const contractLog = p.event.contract_log;
+        const blockInfo = contractLog.block_identifier || { index: 0, hash: '' };
+        const timestamp = contractLog.timestamp || Date.now() / 1000;
+        
+        applyBlocks = [{
+          block_identifier: blockInfo,
+          timestamp: timestamp,
+          transactions: [{
+            transaction_identifier: { hash: contractLog.tx_id || '' },
+            metadata: {
+              receipt: {
+                events: [{
+                  type: 'contract_log',
+                  data: contractLog
+                }]
+              }
+            }
+          }]
+        }];
+        console.log('[WebhookHandler] Created block from contract_log event');
+      }
+    }
     
     console.log(`[WebhookHandler] Found ${applyBlocks.length} blocks to process`);
     
