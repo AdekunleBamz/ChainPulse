@@ -129,16 +129,27 @@ export class ChainhooksService {
   }
 
   async listAllChainhooks(limit: number = 200): Promise<PaginatedChainhookResponse> {
-    const response = await this.client.getChainhooks({ limit, offset: 0 });
+    // Hiro API enforces limit <= 60
+    const pageSize = Math.min(limit, 60);
+    const response = await this.client.getChainhooks({ limit: pageSize, offset: 0 });
     return response;
   }
 
   async deleteDuplicateHooks(): Promise<void> {
-    const resp = await this.listAllChainhooks(200);
+    // Page through all chainhooks (API limit max is 60)
+    const all: Chainhook[] = [];
+    const pageSize = 60;
+    let offset = 0;
+    for (let i = 0; i < 20; i++) {
+      const resp = await this.client.getChainhooks({ limit: pageSize, offset });
+      all.push(...resp.results);
+      offset += resp.results.length;
+      if (resp.results.length < pageSize) break;
+    }
 
     // Group only ChainPulse hooks by name
     const groups = new Map<string, { uuid: string }[]>();
-    for (const hook of resp.results) {
+    for (const hook of all) {
       const name = hook.definition?.name;
       if (!name || !this.desiredHookNames.has(name)) continue;
       const arr = groups.get(name) ?? [];
