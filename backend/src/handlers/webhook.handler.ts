@@ -156,6 +156,24 @@ class WebhookHandler extends EventEmitter {
   async processPayload(payload: ChainhookPayload): Promise<void> {
     console.log('[WebhookHandler] Processing chainhook payload...');
     const p: any = payload as any;
+    
+    // Debug: Log payload structure
+    console.log('[WebhookHandler] Payload keys:', Object.keys(p || {}));
+    console.log('[WebhookHandler] Has apply:', Array.isArray(p?.apply));
+    console.log('[WebhookHandler] Has event:', Boolean(p?.event));
+    if (p?.event) {
+      console.log('[WebhookHandler] Event keys:', Object.keys(p.event || {}));
+      console.log('[WebhookHandler] Has event.apply:', Array.isArray(p?.event?.apply));
+      console.log('[WebhookHandler] Has event.blocks:', Array.isArray(p?.event?.blocks));
+    }
+    // Safe payload dump (limit size to avoid huge logs)
+    try {
+      const payloadStr = JSON.stringify(p).substring(0, 2000);
+      console.log('[WebhookHandler] Payload preview:', payloadStr + (JSON.stringify(p).length > 2000 ? '...' : ''));
+    } catch (e) {
+      console.log('[WebhookHandler] Could not stringify payload');
+    }
+    
     const hookUuid =
       p?.chainhook?.uuid ??
       p?.chainhook_uuid ??
@@ -171,22 +189,38 @@ class WebhookHandler extends EventEmitter {
     console.log(`[WebhookHandler] Hook UUID: ${hookUuid}`);
     console.log(`[WebhookHandler] Streaming: ${Boolean(isStreaming)}`);
 
-    // Handle rollbacks first
-    if (Array.isArray(p?.rollback) && p.rollback.length > 0) {
-      await this.handleRollback(payload.rollback);
+    // Handle rollbacks first - check multiple possible locations
+    const rollback = p?.rollback ?? p?.event?.rollback ?? [];
+    if (Array.isArray(rollback) && rollback.length > 0) {
+      await this.handleRollback(rollback);
     }
 
-    // Process new blocks
-    const applyBlocks = Array.isArray(p?.apply) ? p.apply : [];
+    // Process new blocks - check multiple possible locations
+    const applyBlocks = 
+      Array.isArray(p?.apply) ? p.apply :
+      Array.isArray(p?.event?.apply) ? p.event.apply :
+      Array.isArray(p?.event?.blocks) ? p.event.blocks :
+      [];
+    
+    console.log(`[WebhookHandler] Found ${applyBlocks.length} blocks to process`);
+    
     for (const block of applyBlocks) {
-      console.log(`[WebhookHandler] Processing block ${block.block_identifier.index}`);
+      console.log(`[WebhookHandler] Processing block ${block.block_identifier?.index ?? 'unknown'}`);
       
-      for (const tx of block.transactions) {
-        await this.processTransaction(tx, block.block_identifier.index, block.timestamp);
+      const transactions = block.transactions || [];
+      console.log(`[WebhookHandler] Block has ${transactions.length} transactions`);
+      
+      for (const tx of transactions) {
+        await this.processTransaction(tx, block.block_identifier?.index ?? 0, block.timestamp ?? 0);
       }
     }
 
-    this.totalTransactions += applyBlocks.reduce((sum: number, block: any) => sum + block.transactions.length, 0);
+    const txCount = applyBlocks.reduce((sum: number, block: any) => {
+      const txArray = block.transactions || [];
+      return sum + txArray.length;
+    }, 0);
+    
+    this.totalTransactions += txCount;
 
     console.log(`[WebhookHandler] Total transactions processed: ${this.totalTransactions}`);
   }
