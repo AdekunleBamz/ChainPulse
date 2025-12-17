@@ -31,6 +31,8 @@ async function main(): Promise<void> {
 
     // Register all hooks
     console.log('\n🔗 Registering chainhooks...\n');
+    console.log('🧹 Deleting duplicate ChainPulse hooks (if any)...\n');
+    await service.deleteDuplicateHooks();
     const hooks = await service.registerAllHooks();
 
     // Display results

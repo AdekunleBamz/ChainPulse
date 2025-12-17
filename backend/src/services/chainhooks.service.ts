@@ -21,6 +21,18 @@ function webhookUrl(path: string) {
 export class ChainhooksService {
   private client: ChainhooksClient;
   private registeredHooks: Map<string, Chainhook> = new Map();
+
+  private desiredHookNames = new Set([
+    'ChainPulse-PulseSent',
+    'ChainPulse-Boost',
+    'ChainPulse-Checkin',
+    'ChainPulse-MegaPulse',
+    'ChainPulse-Challenge',
+    'ChainPulse-Reward',
+    'ChainPulse-Tier',
+    'ChainPulse-Badge',
+    'ChainPulse-STXTransfer',
+  ]);
   
   constructor(apiKey: string) {
     this.client = new ChainhooksClient({
@@ -114,6 +126,35 @@ export class ChainhooksService {
     const response = await this.client.getChainhooks({ limit, offset: 0 });
     console.log('[ChainhooksService] Found ' + response.total + ' chainhooks');
     return response;
+  }
+
+  async listAllChainhooks(limit: number = 200): Promise<PaginatedChainhookResponse> {
+    const response = await this.client.getChainhooks({ limit, offset: 0 });
+    return response;
+  }
+
+  async deleteDuplicateHooks(): Promise<void> {
+    const resp = await this.listAllChainhooks(200);
+
+    // Group only ChainPulse hooks by name
+    const groups = new Map<string, { uuid: string }[]>();
+    for (const hook of resp.results) {
+      const name = hook.definition?.name;
+      if (!name || !this.desiredHookNames.has(name)) continue;
+      const arr = groups.get(name) ?? [];
+      arr.push({ uuid: hook.uuid });
+      groups.set(name, arr);
+    }
+
+    // Keep one per name; delete the rest
+    for (const [name, hooks] of groups) {
+      if (hooks.length <= 1) continue;
+      const [, ...dupes] = hooks; // keep first
+      for (const h of dupes) {
+        await this.deleteChainhook(h.uuid);
+        console.log('[ChainhooksService] Deleted duplicate for ' + name + ':', h.uuid);
+      }
+    }
   }
 
   async getChainhook(uuid: string): Promise<Chainhook> {
