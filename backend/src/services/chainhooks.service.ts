@@ -85,7 +85,7 @@ export class ChainhooksService {
       },
       action: {
         type: 'http_post',
-        url: webhookUrl(path),
+        url: (() => { const u = webhookUrl(path); console.log('[DEBUG] Webhook URL:', u); return u; })(),
       }
     };
     const result = await this.client.registerChainhook(definition);
