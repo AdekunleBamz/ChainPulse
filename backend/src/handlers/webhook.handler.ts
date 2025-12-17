@@ -306,7 +306,58 @@ class WebhookHandler extends EventEmitter {
     timestamp: number
   ): Promise<void> {
     const txHash = tx.transaction_identifier.hash;
-    const events = tx.metadata?.receipt?.events || [];
+    const txAny = tx as any;
+    
+    // Chainhooks can send events in different formats:
+    // 1. Standard: tx.metadata.receipt.events
+    // 2. Operations format: tx.operations (with type: "contract_log")
+    let events: any[] = [];
+    
+    // Check standard format first
+    if (Array.isArray(txAny.metadata?.receipt?.events)) {
+      events = txAny.metadata.receipt.events;
+    }
+    
+    // Check operations format (chainhook contract_log format)
+    if (Array.isArray(txAny.operations)) {
+      for (const op of txAny.operations) {
+        if (op.type === 'contract_log' && op.metadata?.topic === 'print') {
+          // Decode the hex-encoded Clarity value
+          const hexValue = op.metadata.value;
+          if (hexValue) {
+            try {
+              // The hex value is a Clarity value that needs to be decoded
+              // For now, we'll try to parse it as JSON if it's already decoded
+              // Otherwise, we'll need to decode the Clarity value
+              const decoded = this.decodeClarityValue(hexValue);
+              events.push({
+                type: 'print_event',
+                data: decoded
+              });
+            } catch (e) {
+              console.error('[WebhookHandler] Failed to decode contract_log value:', e);
+              // Try to process the raw metadata
+              events.push({
+                type: 'print_event',
+                data: op.metadata
+              });
+            }
+          }
+        } else if (op.type === 'stx_transfer') {
+          events.push({
+            type: 'stx_transfer_event',
+            data: {
+              sender: op.account?.address || '',
+              recipient: op.amount?.value ? 'fee-receiver' : '',
+              amount: Math.abs(parseInt(op.amount?.value || '0')),
+              block_height: blockHeight
+            }
+          });
+        }
+      }
+    }
+
+    console.log(`[WebhookHandler] Processing transaction ${txHash}, found ${events.length} events`);
 
     for (const event of events) {
       if (event.type === 'print_event' || event.type === 'SmartContractEvent') {
@@ -316,6 +367,102 @@ class WebhookHandler extends EventEmitter {
       } else if (event.type === 'stx_transfer_event' || event.type === 'STXTransferEvent') {
         await this.processSTXTransfer(event.data, txHash, blockHeight, timestamp);
       }
+    }
+  }
+  
+  /**
+   * Decode Clarity hex-encoded value
+   * The hex value from chainhooks is a Clarity value that needs parsing
+   * If decode_clarity_values is enabled in chainhook config, this might already be decoded
+   */
+  private decodeClarityValue(hexValue: string): any {
+    // Remove 0x prefix if present
+    const hex = hexValue.startsWith('0x') ? hexValue.slice(2) : hexValue;
+    
+    try {
+      // First, try to parse as if it's already decoded JSON (if decode_clarity_values is enabled)
+      const asString = Buffer.from(hex, 'hex').toString('utf-8');
+      try {
+        return JSON.parse(asString);
+      } catch {
+        // Not JSON, continue with manual parsing
+      }
+      
+      // Manual parsing of Clarity tuple format
+      const buffer = Buffer.from(hex, 'hex');
+      
+      // Check if it starts with 0c (tuple type)
+      if (buffer.length > 0 && buffer[0] === 0x0c) {
+        return this.parseClarityTuple(buffer);
+      }
+      
+      // Return raw metadata if we can't decode
+      console.warn('[WebhookHandler] Could not decode Clarity value, using raw');
+      return { raw: hexValue };
+    } catch (e) {
+      console.error('[WebhookHandler] Failed to decode Clarity value:', e);
+      return { raw: hexValue };
+    }
+  }
+  
+  /**
+   * Basic Clarity tuple parser for hex-encoded values
+   * Parses format: 0c (tuple type) + length + key-value pairs
+   */
+  private parseClarityTuple(buffer: Buffer): any {
+    try {
+      let offset = 3; // Skip type byte (0x0c) and length bytes (2 bytes)
+      const result: any = {};
+      
+      while (offset < buffer.length - 1) {
+        // Read key length (2 bytes, big-endian)
+        if (offset + 2 > buffer.length) break;
+        const keyLen = buffer.readUInt16BE(offset);
+        offset += 2;
+        
+        if (offset + keyLen > buffer.length) break;
+        
+        // Read key string
+        const key = buffer.slice(offset, offset + keyLen).toString('utf-8');
+        offset += keyLen;
+        
+        // Read value type byte
+        if (offset >= buffer.length) break;
+        const valueType = buffer[offset];
+        offset += 1;
+        
+        // Parse value based on type
+        if (valueType === 0x00 || valueType === 0x01) { // int or uint (16 bytes)
+          if (offset + 16 > buffer.length) break;
+          const value = buffer.readBigUInt64BE(offset);
+          result[key] = value.toString();
+          offset += 16;
+        } else if (valueType === 0x06 || valueType === 0x07) { // string/ascii (2-byte length + string)
+          if (offset + 2 > buffer.length) break;
+          const strLen = buffer.readUInt16BE(offset);
+          offset += 2;
+          if (offset + strLen > buffer.length) break;
+          const value = buffer.slice(offset, offset + strLen).toString('utf-8');
+          result[key] = value;
+          offset += strLen;
+        } else if (valueType === 0x09) { // principal (standard or contract)
+          // Principal is 21 bytes for standard, 22 for contract
+          if (offset + 21 > buffer.length) break;
+          const principalBytes = buffer.slice(offset, offset + 21);
+          const principal = '0x' + principalBytes.toString('hex');
+          result[key] = principal;
+          offset += 21;
+        } else {
+          // Unknown type, try to skip or break
+          console.warn(`[WebhookHandler] Unknown Clarity value type: 0x${valueType.toString(16)}`);
+          break;
+        }
+      }
+      
+      return result;
+    } catch (e) {
+      console.error('[WebhookHandler] Failed to parse Clarity tuple:', e);
+      return {};
     }
   }
 
