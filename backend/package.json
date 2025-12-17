@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "postinstall": "npm run build",
+    "prestart": "npm run build",
     "start": "node dist/index.js",
     "chainhook:register": "tsx src/scripts/register-chainhooks.ts",
     "chainhook:status": "tsx src/scripts/check-status.ts",

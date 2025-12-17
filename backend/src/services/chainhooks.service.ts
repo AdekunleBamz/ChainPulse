@@ -12,7 +12,6 @@
 import { 
   ChainhooksClient, 
   CHAINHOOKS_BASE_URL,
-  type ChainhookDefinition,
   type Chainhook,
   type PaginatedChainhookResponse 
 } from '@hirosystems/chainhooks-client';
@@ -63,7 +62,7 @@ export class ChainhooksService {
    * Triggers when users send pulses (main activity)
    */
   async registerPulseSentHook(): Promise<Chainhook> {
-    const definition: ChainhookDefinition = {
+    const definition: any = {
       name: 'ChainPulse - Pulse Sent Events',
       chain: 'stacks',
       network: NETWORK as 'mainnet' | 'testnet',
@@ -100,7 +99,7 @@ export class ChainhooksService {
    * Triggers when users activate boosts (premium action)
    */
   async registerBoostHook(): Promise<Chainhook> {
-    const definition: ChainhookDefinition = {
+    const definition: any = {
       name: 'ChainPulse - Boost Activated Events',
       chain: 'stacks',
       network: NETWORK as 'mainnet' | 'testnet',
@@ -136,7 +135,7 @@ export class ChainhooksService {
    * Register chainhook for daily-checkin events
    */
   async registerCheckinHook(): Promise<Chainhook> {
-    const definition: ChainhookDefinition = {
+    const definition: any = {
       name: 'ChainPulse - Daily Check-in Events',
       chain: 'stacks',
       network: NETWORK as 'mainnet' | 'testnet',
@@ -172,7 +171,7 @@ export class ChainhooksService {
    * Register chainhook for mega-pulse events
    */
   async registerMegaPulseHook(): Promise<Chainhook> {
-    const definition: ChainhookDefinition = {
+    const definition: any = {
       name: 'ChainPulse - Mega Pulse Events',
       chain: 'stacks',
       network: NETWORK as 'mainnet' | 'testnet',
@@ -208,7 +207,7 @@ export class ChainhooksService {
    * Register chainhook for challenge-completed events
    */
   async registerChallengeHook(): Promise<Chainhook> {
-    const definition: ChainhookDefinition = {
+    const definition: any = {
       name: 'ChainPulse - Challenge Completed Events',
       chain: 'stacks',
       network: NETWORK as 'mainnet' | 'testnet',
@@ -244,7 +243,7 @@ export class ChainhooksService {
    * Register chainhook for reward-claimed events
    */
   async registerRewardClaimedHook(): Promise<Chainhook> {
-    const definition: ChainhookDefinition = {
+    const definition: any = {
       name: 'ChainPulse - Reward Claimed Events',
       chain: 'stacks',
       network: NETWORK as 'mainnet' | 'testnet',
@@ -280,7 +279,7 @@ export class ChainhooksService {
    * Register chainhook for tier-achieved events
    */
   async registerTierAchievedHook(): Promise<Chainhook> {
-    const definition: ChainhookDefinition = {
+    const definition: any = {
       name: 'ChainPulse - Tier Achieved Events',
       chain: 'stacks',
       network: NETWORK as 'mainnet' | 'testnet',
@@ -316,7 +315,7 @@ export class ChainhooksService {
    * Register chainhook for badge-minted events
    */
   async registerBadgeMintedHook(): Promise<Chainhook> {
-    const definition: ChainhookDefinition = {
+    const definition: any = {
       name: 'ChainPulse - Badge Minted Events',
       chain: 'stacks',
       network: NETWORK as 'mainnet' | 'testnet',
@@ -352,7 +351,7 @@ export class ChainhooksService {
    * Register chainhook for STX transfer events to the contracts
    */
   async registerSTXTransferHook(): Promise<Chainhook> {
-    const definition: ChainhookDefinition = {
+    const definition: any = {
       name: 'ChainPulse - STX Fee Transfers',
       chain: 'stacks',
       network: NETWORK as 'mainnet' | 'testnet',

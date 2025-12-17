@@ -78,7 +78,8 @@ async function executeActivity(
     };
 
     const transaction = await makeContractCall(txOptions);
-    const result = await broadcastTransaction({ transaction, network });
+    // In @stacks/transactions v6.x, broadcastTransaction takes (transaction, network)
+    const result = await broadcastTransaction(transaction, network);
     
     if ('error' in result) {
       console.error(`Failed: ${action} - ${result.error}`);

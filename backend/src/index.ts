@@ -53,7 +53,7 @@ function authenticateWebhook(req: Request, res: Response, next: NextFunction): v
 // Health & Status Routes
 // ===============================
 
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -61,7 +61,7 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-app.get('/api/status', async (req: Request, res: Response) => {
+app.get('/api/status', async (_req: Request, res: Response) => {
   try {
     const stats = webhookHandler.getStats();
     const chainhookStatus = chainhooksService 
@@ -173,7 +173,7 @@ app.get('/api/leaderboard', (req: Request, res: Response) => {
 });
 
 // Get stats
-app.get('/api/stats', (req: Request, res: Response) => {
+app.get('/api/stats', (_req: Request, res: Response) => {
   const stats = webhookHandler.getStats();
   res.json(stats);
 });
@@ -214,7 +214,7 @@ app.get('/api/chainhooks/:uuid', async (req: Request, res: Response) => {
 });
 
 // Register all chainhooks
-app.post('/api/chainhooks/register-all', async (req: Request, res: Response) => {
+app.post('/api/chainhooks/register-all', async (_req: Request, res: Response) => {
   try {
     if (!chainhooksService) {
       res.status(503).json({ error: 'Chainhooks service not initialized' });
@@ -266,7 +266,7 @@ app.delete('/api/chainhooks/:uuid', async (req: Request, res: Response) => {
 });
 
 // Delete all chainhooks
-app.delete('/api/chainhooks', async (req: Request, res: Response) => {
+app.delete('/api/chainhooks', async (_req: Request, res: Response) => {
   try {
     if (!chainhooksService) {
       res.status(503).json({ error: 'Chainhooks service not initialized' });

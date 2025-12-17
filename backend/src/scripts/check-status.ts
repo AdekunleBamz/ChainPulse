@@ -42,10 +42,11 @@ async function main(): Promise<void> {
       console.log(`  Total: ${response.total}\n`);
       
       for (const hook of response.results) {
-        const statusEmoji = hook.status === 'active' ? '🟢' : '🔴';
+        const statusEmoji = hook.status.status === 'streaming' ? '🟢' : '🔴';
         console.log(`  ${statusEmoji} ${hook.definition.name}`);
         console.log(`     UUID: ${hook.uuid}`);
-        console.log(`     Status: ${hook.status}`);
+        console.log(`     Status: ${hook.status.status}`);
+        console.log(`     Enabled: ${hook.status.enabled}`);
         console.log(`     Chain: ${hook.definition.chain}`);
         console.log(`     Network: ${hook.definition.network}`);
         console.log('');
