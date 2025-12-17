@@ -109,19 +109,39 @@ cd frontend && npm run dev
 
 ## 📡 Chainhooks Integration
 
-ChainPulse registers **9 different chainhooks** to monitor contract events:
+ChainPulse registers **9 chainhooks** to monitor contract activity and stream events to your backend.
+
+### Environment variables (backend)
+
+- **HIRO_API_KEY**: Hiro Platform API key (required)
+- **STACKS_NETWORK**: `mainnet` or `testnet` (default: `mainnet`)
+- **WEBHOOK_URL**: Base webhook URL (default: `https://chainpulse-backend.onrender.com/api/chainhook/events`)
+- **WEBHOOK_SECRET**: Optional token appended as `?token=...` to the webhook URL (used because the Chainhooks action schema supports only a URL, not custom headers)
+- **PULSE_CORE_CONTRACT**: e.g. `SP... .pulse-core` (optional; defaults in code)
+- **PULSE_REWARDS_CONTRACT**: e.g. `SP... .pulse-rewards` (optional; defaults in code)
+- **PULSE_BADGE_CONTRACT**: e.g. `SP... .pulse-badge-nft` (optional; defaults in code)
+
+**You do NOT need to store chainhook UUIDs in `.env`.** The registration script is safe to re-run: it deletes duplicates and skips hooks that already exist, so it converges to the same 9 hooks.
+
+### Register / verify chainhooks
+
+```bash
+cd backend
+npm run chainhook:register
+npm run chainhook:status
+```
 
 | Chainhook | Event | Purpose |
 |-----------|-------|---------|
-| `pulse-sent` | print_event | Track pulse activities |
-| `boost-activated` | print_event | Track boost actions |
-| `daily-checkin` | print_event | Track daily check-ins |
-| `mega-pulse` | print_event | Track mega pulse multipliers |
-| `challenge-completed` | print_event | Track challenge completions |
-| `reward-claimed` | print_event | Track reward redemptions |
-| `tier-achieved` | print_event | Track tier promotions |
-| `badge-minted` | nft_event | Track NFT badge mints |
-| `stx-transfer` | stx_event | Track fee payments |
+| `pulse-sent` | `contract_log` | Track pulse-core activity |
+| `boost` | `contract_log` | Track pulse-core boosts |
+| `checkin` | `contract_log` | Track pulse-core daily check-ins |
+| `mega-pulse` | `contract_log` | Track pulse-core mega pulses |
+| `challenge` | `contract_log` | Track pulse-core challenges |
+| `reward` | `contract_log` | Track pulse-rewards activity |
+| `tier` | `contract_log` | Track pulse-rewards tiers |
+| `badge` | `contract_log` | Track pulse-badge-nft activity |
+| `stx-transfer` | `stx_transfer` | Track STX transfers (fees) |
 
 ### Using the Chainhooks Client
 
@@ -138,23 +158,21 @@ const client = new ChainhooksClient({
 
 // Register a chainhook
 const chainhook = await client.registerChainhook({
-  name: 'ChainPulse - Pulse Events',
+  name: 'ChainPulse-PulseSent',
+  version: '1',
   chain: 'stacks',
   network: 'mainnet',
   filters: {
-    scope: 'print_event',
-    contract_identifier: 'SP...pulse-core',
-    contains: 'pulse-sent',
-  },
-  options: {
-    start_at_block_height: 'latest',
-    decode_clarity_values: true,
+    events: [
+      {
+        type: 'contract_log',
+        contract_identifier: 'SP...pulse-core',
+      },
+    ],
   },
   action: {
-    http_post: {
-      url: 'https://your-app.com/api/chainhook/events/pulse',
-      authorization_header: 'Bearer secret',
-    },
+    type: 'http_post',
+    url: 'https://your-app.com/api/chainhook/events/pulse?token=secret',
   },
 });
 ```
