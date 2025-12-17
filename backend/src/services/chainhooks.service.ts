@@ -11,6 +11,9 @@ const PULSE_BADGE_CONTRACT = process.env.PULSE_BADGE_CONTRACT || 'SP3FKNEZ86RG5R
 const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://chainpulse-backend.onrender.com/api/chainhook/events';
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 const NETWORK = process.env.STACKS_NETWORK || 'mainnet';
+// Limit the STX transfer hook to only transfers to your fee receiver address to avoid firehose volume.
+const STX_FEE_RECEIVER =
+  process.env.STX_FEE_RECEIVER || 'SP3FKNEZ86RG5RT7SZ5FBRGH85FZNG94ZH1MCGG6N';
 
 function webhookUrl(path: string) {
   const base = WEBHOOK_URL.replace(/\/+$/, '');
@@ -96,11 +99,6 @@ export class ChainhooksService {
 
   async registerStxTransferHook(): Promise<Chainhook> {
     const existing = await this.findExistingByDisplayName('ChainPulse-STXTransfer');
-    if (existing) {
-      console.log('[ChainhooksService] Already exists stx-transfer:', existing.uuid);
-      this.registeredHooks.set('stx-transfer', existing);
-      return existing;
-    }
     const definition: any = {
       name: 'ChainPulse-STXTransfer',
       version: '1',
@@ -110,6 +108,7 @@ export class ChainhooksService {
         events: [
           {
             type: 'stx_transfer',
+            receiver: STX_FEE_RECEIVER,
           }
         ]
       },
@@ -118,6 +117,17 @@ export class ChainhooksService {
         url: webhookUrl('/stx-transfer'),
       }
     };
+
+    // If the hook already exists, update it in-place instead of creating a new one.
+    if (existing) {
+      await this.client.updateChainhook(existing.uuid, definition);
+      await this.client.enableChainhook(existing.uuid, true);
+      const updated = await this.client.getChainhook(existing.uuid);
+      console.log('[ChainhooksService] Updated stx-transfer filter + enabled:', existing.uuid);
+      this.registeredHooks.set('stx-transfer', updated);
+      return updated;
+    }
+
     const result = await this.client.registerChainhook(definition);
     console.log('[ChainhooksService] Registered stx-transfer:', result.uuid);
     this.registeredHooks.set('stx-transfer', result);
