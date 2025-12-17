@@ -33,6 +33,20 @@ export class ChainhooksService {
     'ChainPulse-Badge',
     'ChainPulse-STXTransfer',
   ]);
+
+  private async findExistingByDisplayName(displayName: string): Promise<Chainhook | undefined> {
+    // Page through hooks (limit max 60) and find first matching definition.name
+    const pageSize = 60;
+    let offset = 0;
+    for (let i = 0; i < 20; i++) {
+      const resp = await this.client.getChainhooks({ limit: pageSize, offset });
+      const found = resp.results.find(h => h.definition?.name === displayName);
+      if (found) return found;
+      offset += resp.results.length;
+      if (resp.results.length < pageSize) break;
+    }
+    return undefined;
+  }
   
   constructor(apiKey: string) {
     this.client = new ChainhooksClient({
@@ -50,6 +64,12 @@ export class ChainhooksService {
   }
 
   async registerHook(key: string, displayName: string, contract: string, path: string): Promise<Chainhook> {
+    const existing = await this.findExistingByDisplayName(displayName);
+    if (existing) {
+      console.log('[ChainhooksService] Already exists ' + key + ':', existing.uuid);
+      this.registeredHooks.set(key, existing);
+      return existing;
+    }
     const definition: any = {
       name: displayName,
       version: '1',
@@ -75,6 +95,12 @@ export class ChainhooksService {
   }
 
   async registerStxTransferHook(): Promise<Chainhook> {
+    const existing = await this.findExistingByDisplayName('ChainPulse-STXTransfer');
+    if (existing) {
+      console.log('[ChainhooksService] Already exists stx-transfer:', existing.uuid);
+      this.registeredHooks.set('stx-transfer', existing);
+      return existing;
+    }
     const definition: any = {
       name: 'ChainPulse-STXTransfer',
       version: '1',
