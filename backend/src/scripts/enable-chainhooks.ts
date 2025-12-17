@@ -8,7 +8,8 @@ async function main() {
   console.log('Enabling all chainhooks...\n');
   
   for (const hook of hooks.results) {
-    if (!hook.enabled) {
+    const isEnabled = hook.status?.enabled === true;
+    if (!isEnabled) {
       await service.toggleChainhook(hook.uuid, true);
       console.log('Enabled:', hook.definition?.name);
     } else {
