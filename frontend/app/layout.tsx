@@ -6,8 +6,8 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'ChainPulse - Real-Time Blockchain Activity Tracker',
-  description: 'Experience the future of on-chain engagement. Send pulses, earn points, climb the leaderboard — all powered by Hiro Chainhooks.',
-  keywords: ['Stacks', 'Blockchain', 'Chainhooks', 'DeFi', 'Web3'],
+  description: 'Live on Stacks Mainnet. Send pulses, earn points, climb the leaderboard — powered by Hiro Chainhooks.',
+  keywords: ['Stacks', 'Blockchain', 'Chainhooks', 'DeFi', 'Web3', 'Mainnet'],
 }
 
 export default function RootLayout({
